@@ -75,7 +75,7 @@ st.sidebar.header("🎯 Filtros de Visualización")
 
 if not df_raw.empty:
     meses_disp = df_raw['Mes'].unique()[::-1]
-    mes_sel = st.sidebar.multiselect("Filtrar por Mes (MM/YYYY)", meses_disp, default=[])
+    mes_sel = st.sidebar.multiselect("Filtrar por Mes", meses_disp, default=[])
     
     tipos_disp = df_raw['Tipo'].unique()
     tipo_sel = st.sidebar.multiselect("Filtrar por Tipo de Movimiento", tipos_disp, default=[])
@@ -160,26 +160,18 @@ else:
                 st.info("No hay ingresos registrados.")
 
         st.markdown("---")
-        
-        # ========================================================
-        # 🔄 NUEVO REEMPLAZO: RANKING CON DRILL-DOWN INTERACTIVO
-        # ========================================================
         st.subheader("🔍 Desglose Dinámico de Gastos (Haz clic para expandir Subcategorías)")
         df_solo_gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
         
         if not df_solo_gastos.empty:
-            # Agrupamos por los dos niveles jerárquicos
             df_drill = df_solo_gastos.groupby(['Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
-            
-            # Usamos un Treemap interactivo que simula el Drill-Down perfecto de Power BI
             fig_drill = px.treemap(
                 df_drill,
-                path=['Categoria', 'Subcategoria'],  # Define la jerarquía: Primero Categoría, luego Subcategoría
+                path=['Categoria', 'Subcategoria'],
                 values='Monto',
                 color='Categoria',
                 color_discrete_sequence=px.colors.qualitative.Dark24
             )
-            # Mostramos los montos dentro de las cajas y limpiamos el hover
             fig_drill.update_traces(
                 textinfo="label+value+percent parent",
                 hovertemplate="<b>%{label}</b><br>Monto: S/. %{value:,.2f}<extra></extra>"
@@ -229,10 +221,3 @@ else:
             st.markdown("##### 📋 Historial Consolidado de Inversiones")
             st.dataframe(df_inv[['Fecha_Raw', 'Categoria', 'Subcategoria', 'Activo_Especifico', 'Monto', 'Descripcion']].rename(columns={'Fecha_Raw': 'Fecha'}), 
                          use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-    st.subheader("📋 Detalle General de Movimientos Filtrados")
-    df_tabla_visible = df_filtrado.copy()
-    df_tabla_visible['Fecha'] = df_tabla_visible['Fecha_Raw'].dt.strftime('%d/%m/%Y')
-    st.dataframe(df_tabla_visible[['Fecha', 'Tipo', 'Categoria', 'Subcategoria', 'Monto', 'Descripcion']], 
-                 use_container_width=True, hide_index=True)
