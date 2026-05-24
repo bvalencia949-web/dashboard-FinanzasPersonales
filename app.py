@@ -72,7 +72,6 @@ df_raw = cargar_datos()
 # 📋 FILTROS INTELIGENTES (SIDEBAR LIMPIO)
 # ==========================================
 st.sidebar.header("🎯 Filtros de Visualización")
-st.sidebar.caption("💡 Si dejas un filtro vacío, se mostrarán TODOS los datos por defecto.")
 
 if not df_raw.empty:
     meses_disp = df_raw['Mes'].unique()[::-1]
@@ -148,7 +147,6 @@ else:
             df_ingresos_mes = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']
             
             if not df_ingresos_mes.empty:
-                # CORRECCIÓN: Agrupamos y coloreamos por 'Subcategoria' en lugar de 'Categoria'
                 df_mes_ing = df_ingresos_mes.groupby(['Mes', 'Subcategoria'])['Monto'].sum().reset_index()
                 fig_bar_ing = px.bar(
                     df_mes_ing, x="Mes", y="Monto", color="Subcategoria",
@@ -162,23 +160,33 @@ else:
                 st.info("No hay ingresos registrados.")
 
         st.markdown("---")
-        st.subheader("🔍 Desglose y Ranking de Gastos Operativos")
+        
+        # ========================================================
+        # 🔄 NUEVO REEMPLAZO: RANKING CON DRILL-DOWN INTERACTIVO
+        # ========================================================
+        st.subheader("🔍 Desglose Dinámico de Gastos (Haz clic para expandir Subcategorías)")
         df_solo_gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
         
         if not df_solo_gastos.empty:
-            df_pareto_gastos = df_solo_gastos.groupby(['Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
-            df_pareto_gastos = df_pareto_gastos.sort_values(by="Monto", ascending=True)
-            df_pareto_gastos['Cat_Sub'] = df_pareto_gastos['Categoria'] + " / " + df_pareto_gastos['Subcategoria']
+            # Agrupamos por los dos niveles jerárquicos
+            df_drill = df_solo_gastos.groupby(['Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
             
-            fig_gastos = px.bar(
-                df_pareto_gastos, x="Monto", y="Cat_Sub", orientation="h",
-                color="Categoria", text_auto='.2f', color_discrete_sequence=px.colors.qualitative.Dark24
+            # Usamos un Treemap interactivo que simula el Drill-Down perfecto de Power BI
+            fig_drill = px.treemap(
+                df_drill,
+                path=['Categoria', 'Subcategoria'],  # Define la jerarquía: Primero Categoría, luego Subcategoría
+                values='Monto',
+                color='Categoria',
+                color_discrete_sequence=px.colors.qualitative.Dark24
             )
-            fig_gastos.update_traces(hovertemplate="<b>Monto:</b> S/. %{x:,.2f}<extra></extra>")
-            fig_gastos.update_layout(yaxis_title="", xaxis_title="Monto total gastado (S/.)", showlegend=False)
-            st.plotly_chart(fig_gastos, use_container_width=True)
+            # Mostramos los montos dentro de las cajas y limpiamos el hover
+            fig_drill.update_traces(
+                textinfo="label+value+percent parent",
+                hovertemplate="<b>%{label}</b><br>Monto: S/. %{value:,.2f}<extra></extra>"
+            )
+            st.plotly_chart(fig_drill, use_container_width=True)
         else:
-            st.info("No hay registros clasificados como 'Gasto' para mostrar el ranking.")
+            st.info("No hay registros clasificados como 'Gasto' para mostrar el desglose.")
 
     with tab_inversiones:
         st.subheader("🚀 Análisis Detallado de Capital Invertido")
