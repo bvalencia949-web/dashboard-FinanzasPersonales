@@ -99,7 +99,7 @@ else:
 st.title("🏦 Dashboard de Finanzas Personales")
 
 if df_raw.empty:
-    st.error("No se pudo cargar la información. Revisa la conexión con Notion o verifica tus columnas.")
+    st.error("No se pudo cargar la información. Revisa la conexión con Notion.")
 else:
     # KPIs basados en la selección de la barra lateral
     ingresos = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']['Monto'].sum()
@@ -121,90 +121,121 @@ else:
     tab_general, tab_inversiones = st.tabs(["📊 Análisis Operativo", "🚀 Rendimiento Inversiones"])
 
     with tab_general:
-        col_a, col_b = st.columns(2)
+        # PRIMER BLOQUE: DOS COLUMNAS PARA COMPARAR FLUJOS SALIENTES VS ENTRANTES
+        col_salidas, col_entradas = st.columns(2)
         
-        with col_a:
-            st.subheader("📅 Distribución Mensual por Categoría")
-            if not df_filtrado.empty:
-                # Agrupamos por Mes, Categoría y Subcategoría
-                df_mes_cat = df_filtrado.groupby(['Mes', 'Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
-                
-                # Gráfico de barras apiladas por Mes y Categoría, con Subcategoría en el desglose (hover)
-                fig_bar_mes = px.bar(
-                    df_mes_cat, 
+        with col_salidas:
+            st.subheader("📅 Gastos e Inversiones por Mes")
+            # Filtramos estrictamente para excluir Ingresos del gráfico
+            df_salidas = df_filtrado[df_filtrado['Tipo'].isin(['Gasto', 'Inversión'])]
+            
+            if not df_salidas.empty:
+                df_mes_sal = df_salidas.groupby(['Mes', 'Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
+                fig_bar_sal = px.bar(
+                    df_mes_sal, 
                     x="Mes", 
                     y="Monto", 
                     color="Categoria",
-                    title="Montos por Mes y Categoría",
                     hover_data=["Subcategoria"],
                     barmode="stack",
                     color_discrete_sequence=px.colors.qualitative.Safe
                 )
-                fig_bar_mes.update_layout(xaxis_title="Mes", yaxis_title="Monto (S/.)", legend_title="Categorías")
-                st.plotly_chart(fig_bar_mes, use_container_width=True)
+                fig_bar_sal.update_layout(xaxis_title="Mes", yaxis_title="Monto (S/.)", legend_title="Categorías")
+                st.plotly_chart(fig_bar_sal, use_container_width=True)
             else:
-                st.info("No hay datos para los filtros seleccionados.")
+                st.info("No hay gastos o inversiones registrados en este periodo.")
             
-        with col_b:
-            st.subheader("🔍 Desglose de Gastos (Top Categorías y Subcategorías)")
-            # Filtrar estrictamente Gastos para este gráfico analítico
-            df_solo_gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
+        with col_entradas:
+            st.subheader("📅 Origen de Ingresos por Mes")
+            # Filtramos estrictamente para aislar Ingresos
+            df_ingresos_mes = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']
             
-            if not df_solo_gastos.empty:
-                # Agrupamos por Categoria y Subcategoria para ordenarlo jerárquicamente
-                df_pareto_gastos = df_solo_gastos.groupby(['Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
-                df_pareto_gastos = df_pareto_gastos.sort_values(by="Monto", ascending=True) # Ascendente para que la barra más larga quede arriba en horizontal
-                
-                # Gráfico de barras horizontales mostrando Categoría + Subcategoría en el eje Y
-                df_pareto_gastos['Cat_Sub'] = df_pareto_gastos['Categoria'] + " / " + df_pareto_gastos['Subcategoria']
-                
-                fig_gastos = px.bar(
-                    df_pareto_gastos,
-                    x="Monto",
-                    y="Cat_Sub",
-                    orientation="h",
+            if not df_ingresos_mes.empty:
+                df_mes_ing = df_ingresos_mes.groupby(['Mes', 'Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
+                fig_bar_ing = px.bar(
+                    df_mes_ing, 
+                    x="Mes", 
+                    y="Monto", 
                     color="Categoria",
-                    text_auto='.2f',
-                    title="Ranking de Gastos del Mayor al Menor",
-                    color_discrete_sequence=px.colors.qualitative.Dark24
+                    hover_data=["Subcategoria"],
+                    barmode="stack",
+                    color_discrete_sequence=px.colors.qualitative.Pastel
                 )
-                fig_gastos.update_layout(yaxis_title="", xaxis_title="Monto total gastado (S/.)", showlegend=False)
-                st.plotly_chart(fig_gastos, use_container_width=True)
+                fig_bar_ing.update_layout(xaxis_title="Mes", yaxis_title="Monto (S/.)", legend_title="Fuentes de Ingreso")
+                st.plotly_chart(fig_bar_ing, use_container_width=True)
             else:
-                st.info("No hay registros clasificados como 'Gasto' en los filtros seleccionados.")
+                st.info("No hay ingresos registrados en este periodo.")
+
+        st.markdown("---")
+        
+        # SEGUNDO BLOQUE: FILA COMPLETA PARA EL PARETO ANALÍTICO DE GASTOS
+        st.subheader("🔍 Desglose y Ranking de Gastos Operativos")
+        df_solo_gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
+        
+        if not df_solo_gastos.empty:
+            df_pareto_gastos = df_solo_gastos.groupby(['Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
+            df_pareto_gastos = df_pareto_gastos.sort_values(by="Monto", ascending=True)
+            df_pareto_gastos['Cat_Sub'] = df_pareto_gastos['Categoria'] + " / " + df_pareto_gastos['Subcategoria']
+            
+            fig_gastos = px.bar(
+                df_pareto_gastos,
+                x="Monto",
+                y="Cat_Sub",
+                orientation="h",
+                color="Categoria",
+                text_auto='.2f',
+                color_discrete_sequence=px.colors.qualitative.Dark24
+            )
+            fig_gastos.update_layout(yaxis_title="", xaxis_title="Monto total gastado (S/.)", showlegend=False)
+            st.plotly_chart(fig_gastos, use_container_width=True)
+        else:
+            st.info("No hay registros clasificados como 'Gasto' para mostrar el ranking.")
 
     with tab_inversiones:
-        st.subheader("Análisis Detallado de Inversiones")
+        st.subheader("🚀 Análisis Detallado de Capital Invertido")
         
-        # Filtro exclusivo de Inversión extraído de la data cruda para no alterarse por filtros de Categorías de gasto
+        # Filtro exclusivo de Inversión aislado del resto de la data operativa
         df_inv = df_raw[df_raw['Tipo'] == 'Inversión']
         
         if df_inv.empty:
-            st.info("No hay registros marcados como 'Inversión' en tu Notion para mostrar.")
+            st.info("No hay registros marcados como 'Inversión' en tu Notion.")
         else:
-            col_inv1, col_inv2 = st.columns([1, 2])
+            col_inv_mes, col_inv_tipo = st.columns(2)
             
-            with col_inv1:
-                st.write("**Total acumulado por tipo de activo:**")
-                df_inv_tot = df_inv.groupby('Subcategoria')['Monto'].sum().reset_index()
-                st.dataframe(df_inv_tot, hide_index=True, use_container_width=True)
-            
-            with col_inv2:
-                # Inversiones por Mes y Subcategoría (Acciones vs Emprendimientos)
-                df_inv_month = df_inv.groupby(['Mes', 'Subcategoria'])['Monto'].sum().reset_index()
-                fig_inv = px.bar(
-                    df_inv_month, 
-                    x='Mes', 
-                    y='Monto', 
-                    color='Subcategoria',
-                    barmode='group', 
-                    title="Inversiones Mensuales por Activo (Acciones vs Emprendimientos)",
-                    text_auto='.2s', 
-                    color_discrete_sequence=px.colors.qualitative.Pastel
+            with col_inv_mes:
+                st.markdown("#### 📅 Ritmo de Inversión Mensual")
+                # Gráfico 1 sugerido: Saber cuánto inviertes al mes en total
+                df_inv_month = df_inv.groupby(['Mes'])['Monto'].sum().reset_index()
+                fig_inv_cron = px.bar(
+                    df_inv_month,
+                    x='Mes',
+                    y='Monto',
+                    text_auto='.2f',
+                    title="Monto Total Inyectado por Mes",
+                    color_discrete_sequence=['#2b5c8f']
                 )
-                st.plotly_chart(fig_inv, use_container_width=True)
+                fig_inv_cron.update_layout(xaxis_title="Mes", yaxis_title="Total Invertido (S/.)")
+                st.plotly_chart(fig_inv_cron, use_container_width=True)
+            
+            with col_inv_tipo:
+                st.markdown("#### 🧩 Distribución de la Cartera (Asset Allocation)")
+                # Gráfico 2 sugerido: Cómo inviertes por subcategoría (acciones vs emprendimientos)
+                df_inv_sub = df_inv.groupby('Subcategoria')['Monto'].sum().reset_index()
+                fig_inv_pie = px.pie(
+                    df_inv_sub,
+                    values='Monto',
+                    names='Subcategoria',
+                    hole=0.4,
+                    title="Composición Histórica de Inversiones",
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
+                st.plotly_chart(fig_inv_pie, use_container_width=True)
+                
+            st.markdown("##### 📋 Historial Consolidado de Inversiones")
+            st.dataframe(df_inv[['Fecha', 'Categoria', 'Subcategoria', 'Monto', 'Descripcion']], 
+                         use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    st.subheader("📋 Detalle de Movimientos Filtrados")
+    st.subheader("📋 Detalle General de Movimientos Filtrados")
     st.dataframe(df_filtrado[['Fecha', 'Tipo', 'Categoria', 'Subcategoria', 'Monto', 'Descripcion']], 
                  use_container_width=True, hide_index=True)
