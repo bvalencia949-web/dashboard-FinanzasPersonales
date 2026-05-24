@@ -1,39 +1,37 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import requests  # Usamos la librería estándar de peticiones para evitar fallos de versiones
+import requests
 
 # ==========================================
-# 🔒 CONFIGURACIÓN SEGURA DE CREDENCIALES
+# 🔒 CONFIGURACIÓN Y CREDENCIALES
 # ==========================================
 NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
 DATABASE_ID = st.secrets["DATABASE_ID"]
 
-st.set_page_config(page_title="Dashboard de Gastos Financieros", layout="wide")
-st.title("📊 Control de Gastos Financieros")
-st.markdown("Visualización en tiempo real de la data registrada desde el iPhone.")
+st.set_page_config(page_title="Gestión Financiera Pro", layout="wide")
+
+# Estilo personalizado para las métricas
+st.markdown("""
+    <style>
+    [data-testid="stMetricValue"] { font-size: 28px; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ==========================================
-# 🔄 EXTRACCIÓN DIRECTA DESDE LA API DE NOTION
+# 🔄 EXTRACCIÓN DE DATOS
 # ==========================================
-def cargar_datos_notion_directo():
-    # URL oficial de la API de Notion para consultar bases de datos
+def cargar_datos():
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
-    
-    # Cabeceras estándar requeridas por Notion
     headers = {
         "Authorization": f"Bearer {NOTION_TOKEN}",
-        "Notion-Version": "2022-06-28",  # Versión estable de la API
+        "Notion-Version": "2022-06-28",
         "Content-Type": "application/json"
     }
     
     try:
-        # Hacemos la consulta directa por HTTP POST
         response = requests.post(url, headers=headers)
-        
-        # Validar si las credenciales fallaron
         if response.status_code != 200:
-            st.error(f"Error de autenticación con Notion (Status {response.status_code}): {response.text}")
             return pd.DataFrame()
             
         data = response.json()
@@ -43,92 +41,128 @@ def cargar_datos_notion_directo():
         for row in results:
             props = row.get("properties", {})
             
-            # 1. Monto (Number)
-            monto = props.get("Monto", {}).get("number", 0)
-            monto = float(monto) if monto is not None else 0.0
-            
-            # 2. Descripcion (Rich Text)
-            desc_list = props.get("Descripcion", {}).get("rich_text", [])
-            descripcion = desc_list[0].get("text", {}).get("content", "Sin descripción") if desc_list else "Sin descripción"
-            
-            # 3. Fecha (Date)
-            fecha_data = props.get("Fecha", {}).get("date", {})
-            fecha = fecha_data.get("start", None) if fecha_data else None
-            
-            # 4. Categoria (Select)
-            categoria_data = props.get("Categoria", {}).get("select", {})
-            categoria = categoria_data.get("name", "Sin Categoría") if categoria_data else "Sin Categoría"
-            
-            # 5. Subcategoria (Select)
-            subcat_data = props.get("Subcategoria", {}).get("select", {})
-            subcategoria = subcat_data.get("name", "Sin Subcategoría") if subcat_data else "Sin Subcategoría"
-            
-            # 6. Tarjeta (Select)
-            tarjeta_data = props.get("Tarjeta", {}).get("select", {})
-            tarjeta = tarjeta_data.get("name", "No especificado") if tarjeta_data else "No especificado"
-            
-            # 7. Tipo (Select)
-            tipo_data = props.get("Tipo", {}).get("select", {})
-            tipo = tipo_data.get("name", "No especificado") if tipo_data else "No especificado"
-            
+            # Extraer campos (ajustados a tus nombres reales)
+            monto = props.get("Monto", {}).get("number", 0) or 0
+            tipo = props.get("Tipo", {}).get("select", {}).get("name", "Gasto")
+            fecha_str = props.get("Fecha", {}).get("date", {}).get("start", None)
+            categoria = props.get("Categoria", {}).get("select", {}).get("name", "Otros")
+            subcat = props.get("Subcategoria", {}).get("select", {}).get("name", "General")
+            descripcion = props.get("Descripcion", {}).get("rich_text", [])
+            desc = descripcion[0].get("text", {}).get("content", "") if descripcion else ""
+
             datos.append({
-                "Fecha": fecha,
-                "Descripcion": descripcion,
-                "Categoria": categoria,
-                "Subcategoria": subcategoria,
-                "Tarjeta": tarjeta,
+                "Fecha": fecha_str,
                 "Tipo": tipo,
-                "Monto": monto
+                "Categoria": categoria,
+                "Subcategoria": subcat,
+                "Monto": float(monto),
+                "Descripcion": desc
             })
             
         df = pd.DataFrame(datos)
         if not df.empty:
             df['Fecha'] = pd.to_datetime(df['Fecha'])
-            df = df.sort_values(by="Fecha", ascending=False)
+            # Crear columnas de tiempo para filtros
+            df['Mes'] = df['Fecha'].dt.strftime('%Y-%m')
+            df['Nombre_Mes'] = df['Fecha'].dt.strftime('%B %Y')
         return df
-
-    except Exception as e:
-        st.error(f"Error en la petición de datos: {e}")
+    except:
         return pd.DataFrame()
 
-# Ejecutar la consulta directa
-df_gastos = cargar_datos_notion_directo()
+df_raw = cargar_datos()
 
 # ==========================================
-# 📈 RENDERIZADO DEL DASHBOARD
+# 📋 FILTROS (SIDEBAR)
 # ==========================================
-if df_gastos.empty:
-    st.warning("No se encontraron registros activos en el Dashboard.")
+st.sidebar.header("🎯 Filtros de Visualización")
+
+if not df_raw.empty:
+    # Filtro de Mes
+    meses_disp = sorted(df_raw['Mes'].unique(), reverse=True)
+    mes_sel = st.sidebar.multiselect("Seleccionar Mes", meses_disp, default=meses_disp[:1])
+    
+    # Filtro de Tipo
+    tipos_disp = df_raw['Tipo'].unique()
+    tipo_sel = st.sidebar.multiselect("Tipo de Movimiento", tipos_disp, default=tipos_disp)
+
+    # Aplicar Filtros
+    df_filtrado = df_raw[df_raw['Mes'].isin(mes_sel) & df_raw['Tipo'].isin(tipo_sel)]
+    
+    # Filtros dinámicos de Categoría y Subcategoría basados en lo anterior
+    cat_disp = df_filtrado['Categoria'].unique()
+    cat_sel = st.sidebar.multiselect("Categoría", cat_disp, default=cat_disp)
+    
+    df_filtrado = df_filtrado[df_filtrado['Categoria'].isin(cat_sel)]
 else:
-    # 1. Indicadores clave (Métricas)
-    total_gastado = df_gastos["Monto"].sum()
-    num_transacciones = len(df_gastos)
-    
-    col1, col2 = st.columns(2)
-    col1.metric(label="💰 Total Gastado", value=f"S/. {total_gastado:,.2f}")
-    col2.metric(label="🧾 Número de Registros", value=num_transacciones)
-    
-    st.markdown("---")
-    
-    # 2. Gráficos Distribución
-    col_graf1, col_graf2 = st.columns(2)
-    
-    with col_graf1:
-        st.subheader("Gastos por Macro-Categoría")
-        df_cat = df_gastos.groupby("Categoria")["Monto"].sum().reset_index()
-        fig_pie = px.pie(df_cat, values="Monto", names="Categoria", hole=0.4)
-        st.plotly_chart(fig_pie, use_container_width=True)
-        
-    with col_graf2:
-        st.subheader("Distribución por Método de Pago / Tarjeta")
-        df_tarjeta = df_gastos.groupby("Tarjeta")["Monto"].sum().reset_index()
-        fig_bar_tarjeta = px.bar(df_tarjeta, x="Tarjeta", y="Monto", text_auto='.2f', color="Tarjeta")
-        st.plotly_chart(fig_bar_tarjeta, use_container_width=True)
-        
+    df_filtrado = pd.DataFrame()
+
+# ==========================================
+# 📊 LÓGICA DE CÁLCULO (SALDO NETO)
+# ==========================================
+st.title("🏦 Dashboard de Finanzas Personales")
+
+if df_raw.empty:
+    st.error("No se pudo cargar la información. Revisa la conexión con Notion.")
+else:
+    # Cálculos globales para métricas (basados en el filtro de mes seleccionado)
+    # Importante: Ajustamos los nombres de 'Tipo' según lo que tengas en Notion
+    ingresos = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']['Monto'].sum()
+    gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']['Monto'].sum()
+    inversiones = df_filtrado[df_filtrado['Tipo'] == 'Inversión']['Monto'].sum()
+    saldo_neto = ingresos - gastos - inversiones
+
+    # 1. KPIs Principales
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("💰 Saldo Neto (Mes)", f"S/. {saldo_neto:,.2f}", delta_color="normal")
+    m2.metric("📈 Ingresos", f"S/. {ingresos:,.2f}")
+    m3.metric("📉 Gastos", f"S/. {gastos:,.2f}")
+    m4.metric("🧱 Inversiones", f"S/. {inversiones:,.2f}")
+
     st.markdown("---")
 
-    # 3. Tabla Detallada
-    st.subheader("📋 Últimos movimientos registrados")
-    df_mostrar = df_gastos.copy()
-    df_mostrar['Fecha'] = df_mostrar['Fecha'].dt.strftime('%Y-%m-%d').fillna("Sin Fecha")
-    st.dataframe(df_mostrar, use_container_width=True)
+    # 2. SECCIÓN DE ANÁLISIS POR PESTAÑAS
+    tab_general, tab_inversiones = st.tabs(["📊 Análisis General", "🚀 Rendimiento Inversiones"])
+
+    with tab_general:
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            st.subheader("Distribución por Categoría")
+            fig_cat = px.sunburst(df_filtrado, path=['Categoria', 'Subcategoria'], values='Monto',
+                                 color='Monto', color_continuous_scale='Blues')
+            st.plotly_chart(fig_cat, use_container_width=True)
+            
+        with col_b:
+            st.subheader("Evolución Diaria de Gastos")
+            df_daily = df_filtrado[df_filtrado['Tipo'] == 'Gasto'].groupby('Fecha')['Monto'].sum().reset_index()
+            fig_line = px.line(df_daily, x='Fecha', y='Monto', markers=True, line_shape="spline")
+            st.plotly_chart(fig_line, use_container_width=True)
+
+    with tab_inversiones:
+        st.subheader("Análisis Detallado de Inversiones")
+        
+        # Filtrar solo inversiones
+        df_inv = df_raw[df_raw['Tipo'] == 'Inversión']
+        
+        if df_inv.empty:
+            st.info("No hay registros marcados como 'Inversión' para mostrar.")
+        else:
+            col_inv1, col_inv2 = st.columns([1, 2])
+            
+            with col_inv1:
+                st.write("**Total acumulado por activo:**")
+                df_inv_tot = df_inv.groupby('Subcategoria')['Monto'].sum().reset_index()
+                st.dataframe(df_inv_tot, hide_index=True)
+            
+            with col_inv2:
+                # Inversiones por Mes y Subcategoría (Acciones vs Emprendimientos)
+                df_inv_month = df_inv.groupby(['Mes', 'Subcategoria'])['Monto'].sum().reset_index()
+                fig_inv = px.bar(df_inv_month, x='Mes', y='Monto', color='Subcategoria',
+                                barmode='group', title="Inversiones Mensuales por Tipo",
+                                text_auto='.2s', color_discrete_sequence=px.colors.qualitative.Pastel)
+                st.plotly_chart(fig_inv, use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("📋 Detalle de Movimientos Filtrados")
+    st.dataframe(df_filtrado[['Fecha', 'Tipo', 'Categoria', 'Subcategoria', 'Monto', 'Descripcion']], 
+                 use_container_width=True, hide_index=True)
