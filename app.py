@@ -49,7 +49,7 @@ def cargar_datos():
             desc = descripcion[0].get("text", {}).get("content", "") if descripcion else ""
 
             datos.append({
-                "Fecha": fecha_str,
+                "Fecha_Raw": fecha_str,
                 "Tipo": tipo,
                 "Categoria": categoria,
                 "Subcategoria": subcat,
@@ -59,8 +59,11 @@ def cargar_datos():
             
         df = pd.DataFrame(datos)
         if not df.empty:
-            df['Fecha'] = pd.to_datetime(df['Fecha'])
-            df['Mes'] = df['Fecha'].dt.strftime('%Y-%m')
+            df['Fecha_Raw'] = pd.to_datetime(df['Fecha_Raw'])
+            # Ordenamos cronológicamente antes de formatear
+            df = df.sort_values(by='Fecha_Raw', ascending=True)
+            # 📅 Ajuste: Forzamos el formato estrictamente a mm/yyyy tanto para el filtro como gráficos
+            df['Mes'] = df['Fecha_Raw'].dt.strftime('%m/%Y')
         return df
     except:
         return pd.DataFrame()
@@ -73,8 +76,9 @@ df_raw = cargar_datos()
 st.sidebar.header("🎯 Filtros de Visualización")
 
 if not df_raw.empty:
-    meses_disp = sorted(df_raw['Mes'].unique(), reverse=True)
-    mes_sel = st.sidebar.multiselect("Seleccionar Mes", meses_disp, default=meses_disp[:2] if len(meses_disp) > 1 else meses_disp)
+    # Desplegable ordenado con formato mm/yyyy
+    meses_disp = df_raw['Mes'].unique()[::-1] # Invertido para ver los más recientes arriba
+    mes_sel = st.sidebar.multiselect("Seleccionar Mes (MM/YYYY)", meses_disp, default=meses_disp[:2] if len(meses_disp) > 1 else meses_disp)
     
     tipos_disp = df_raw['Tipo'].unique()
     tipo_sel = st.sidebar.multiselect("Tipo de Movimiento", tipos_disp, default=tipos_disp)
@@ -115,29 +119,42 @@ else:
         col_salidas, col_entradas = st.columns(2)
         
         with col_salidas:
-            st.subheader("📅 Gastos e Inversiones por Mes")
-            df_salidas = df_filtrado[df_filtrado['Tipo'].isin(['Gasto', 'Inversión'])]
-            if not df_salidas.empty:
-                df_mes_sal = df_salidas.groupby(['Mes', 'Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
+            st.subheader("📅 Composición de Gastos por Mes")
+            # Ajuste 1: Filtramos estrictamente para incluir SOLAMENTE Tipo == Gasto
+            df_solo_gastos_mes = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
+            
+            if not df_solo_gastos_mes.empty:
+                df_mes_sal = df_solo_gastos_mes.groupby(['Mes', 'Categoria'])['Monto'].sum().reset_index()
                 fig_bar_sal = px.bar(
                     df_mes_sal, x="Mes", y="Monto", color="Categoria",
-                    hover_data=["Subcategoria"], barmode="stack",
-                    color_discrete_sequence=px.colors.qualitative.Safe
+                    barmode="stack", color_discrete_sequence=px.colors.qualitative.Safe
                 )
+                # Ajuste 3: Desactivar los cuadros de valores emergentes (hover)
+                fig_bar_sal.update_layout(
+                    xaxis_title="Mes", yaxis_title="Monto (S/.)", 
+                    legend_title="Categorías", hovermode=False
+                )
+                fig_bar_sal.update_traces(hoverinfo='none', hovertemplate=None)
                 st.plotly_chart(fig_bar_sal, use_container_width=True)
             else:
-                st.info("No hay gastos o inversiones registrados.")
+                st.info("No hay gastos registrados en este periodo.")
             
         with col_entradas:
             st.subheader("📅 Origen de Ingresos por Mes")
             df_ingresos_mes = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']
+            
             if not df_ingresos_mes.empty:
-                df_mes_ing = df_ingresos_mes.groupby(['Mes', 'Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
+                df_mes_ing = df_ingresos_mes.groupby(['Mes', 'Categoria'])['Monto'].sum().reset_index()
                 fig_bar_ing = px.bar(
                     df_mes_ing, x="Mes", y="Monto", color="Categoria",
-                    hover_data=["Subcategoria"], barmode="stack",
-                    color_discrete_sequence=px.colors.qualitative.Pastel
+                    barmode="stack", color_discrete_sequence=px.colors.qualitative.Pastel
                 )
+                # Ajuste 3: Desactivar hover en ingresos
+                fig_bar_ing.update_layout(
+                    xaxis_title="Mes", yaxis_title="Monto (S/.)", 
+                    legend_title="Fuentes", hovermode=False
+                )
+                fig_bar_ing.update_traces(hoverinfo='none', hovertemplate=None)
                 st.plotly_chart(fig_bar_ing, use_container_width=True)
             else:
                 st.info("No hay ingresos registrados.")
@@ -145,15 +162,19 @@ else:
         st.markdown("---")
         st.subheader("🔍 Desglose y Ranking de Gastos Operativos")
         df_solo_gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
+        
         if not df_solo_gastos.empty:
             df_pareto_gastos = df_solo_gastos.groupby(['Categoria', 'Subcategoria'])['Monto'].sum().reset_index()
             df_pareto_gastos = df_pareto_gastos.sort_values(by="Monto", ascending=True)
             df_pareto_gastos['Cat_Sub'] = df_pareto_gastos['Categoria'] + " / " + df_pareto_gastos['Subcategoria']
+            
             fig_gastos = px.bar(
                 df_pareto_gastos, x="Monto", y="Cat_Sub", orientation="h",
                 color="Categoria", text_auto='.2f', color_discrete_sequence=px.colors.qualitative.Dark24
             )
-            fig_gastos.update_layout(yaxis_title="", xaxis_title="Monto total gastado (S/.)", showlegend=False)
+            # Ajuste 3: Desactivar hover en ranking de barras horizontales
+            fig_gastos.update_layout(yaxis_title="", xaxis_title="Monto total gastado (S/.)", showlegend=False, hovermode=False)
+            fig_gastos.update_traces(hoverinfo='none', hovertemplate=None)
             st.plotly_chart(fig_gastos, use_container_width=True)
 
     with tab_inversiones:
@@ -163,8 +184,6 @@ else:
         if df_inv.empty:
             st.info("No hay registros marcados como 'Inversión' en tu Notion.")
         else:
-            # LÓGICA INTELIGENTE DE SEPARACIÓN PARA EL DETALLE ESPECÍFICO DEL USUARIO
-            # Si en Notion usas Categoria='Emprendimiento' y Subcategoria='iPhone', creamos una etiqueta clara
             df_inv['Activo_Especifico'] = df_inv.apply(
                 lambda r: f"{r['Categoria']} {r['Subcategoria']}" if "Emprendimiento" in r['Categoria'] else r['Subcategoria'], 
                 axis=1
@@ -179,19 +198,28 @@ else:
                     df_inv_month, x='Mes', y='Monto', text_auto='.2f',
                     title="Monto Total Inyectado por Mes", color_discrete_sequence=['#2b5c8f']
                 )
+                # Ajuste 3: Desactivar hover en ritmos de inversión
+                fig_inv_cron.update_layout(xaxis_title="Mes", yaxis_title="Total Invertido (S/.)", hovermode=False)
+                fig_inv_cron.update_traces(hoverinfo='none', hovertemplate=None)
                 st.plotly_chart(fig_inv_cron, use_container_width=True)
             
             with col_inv_tipo:
                 st.markdown("#### 🧩 Distribución de la Cartera (Asset Allocation Real)")
-                # NUEVO ENFOQUE: Agrupamos por el Activo Específico detallado
                 df_inv_sub = df_inv.groupby('Activo_Especifico')['Monto'].sum().reset_index()
                 fig_inv_pie = px.pie(
                     df_inv_sub, values='Monto', names='Activo_Especifico', hole=0.4,
                     title="Composición Real de tus Proyectos e Instrumentos",
                     color_discrete_sequence=px.colors.qualitative.Bold
                 )
+                # Ajuste 3: Desactivar hover en el gráfico de tarta
+                fig_inv_pie.update_layout(hovermode=False)
+                fig_inv_pie.update_traces(hoverinfo='none', hovertemplate=None)
                 st.plotly_chart(fig_inv_pie, use_container_width=True)
-                
-            st.markdown("##### 📋 Historial Consolidado de Inversiones")
-            st.dataframe(df_inv[['Fecha', 'Categoria', 'Subcategoria', 'Activo_Especifico', 'Monto', 'Descripcion']], 
-                         use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.subheader("📋 Detalle General de Movimientos Filtrados")
+    # Formateamos la columna Fecha visible de la tabla para que sea limpia
+    df_tabla_visible = df_filtrado.copy()
+    df_tabla_visible['Fecha'] = df_tabla_visible['Fecha_Raw'].dt.strftime('%d/%m/%Y')
+    st.dataframe(df_tabla_visible[['Fecha', 'Tipo', 'Categoria', 'Subcategoria', 'Monto', 'Descripcion']], 
+                 use_container_width=True, hide_index=True)
