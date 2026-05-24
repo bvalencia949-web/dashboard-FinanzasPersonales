@@ -75,23 +75,18 @@ st.sidebar.header("🎯 Filtros de Visualización")
 st.sidebar.caption("💡 Si dejas un filtro vacío, se mostrarán TODOS los datos por defecto.")
 
 if not df_raw.empty:
-    # 1. Filtro de Mes
     meses_disp = df_raw['Mes'].unique()[::-1]
     mes_sel = st.sidebar.multiselect("Filtrar por Mes (MM/YYYY)", meses_disp, default=[])
     
-    # 2. Filtro de Tipo
     tipos_disp = df_raw['Tipo'].unique()
     tipo_sel = st.sidebar.multiselect("Filtrar por Tipo de Movimiento", tipos_disp, default=[])
 
-    # 3. Filtro de Categoría
     cat_disp = sorted(df_raw['Categoria'].unique())
     cat_sel = st.sidebar.multiselect("Filtrar por Categoría", cat_disp, default=[])
 
-    # 4. Filtro de Subcategoría (Nuevo)
     subcat_disp = sorted(df_raw['Subcategoria'].unique())
     subcat_sel = st.sidebar.multiselect("Filtrar por Subcategoría", subcat_disp, default=[])
 
-    # --- LÓGICA: Si está vacío, equivale a seleccionar todos ---
     df_filtrado = df_raw.copy()
     
     if mes_sel:
@@ -108,12 +103,11 @@ else:
 # ==========================================
 # 📊 LÓGICA DE CÁLCULO
 # ==========================================
-st.title("🏦 Finanzas Personales")
+st.title("🏦 Dashboard de Finanzas Personales")
 
 if df_raw.empty:
     st.error("No se pudo cargar la información. Revisa la conexión con Notion.")
 else:
-    # Cálculos dinámicos basados en la pizarra filtrada
     ingresos = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']['Monto'].sum()
     gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']['Monto'].sum()
     inversiones = df_filtrado[df_filtrado['Tipo'] == 'Inversión']['Monto'].sum()
@@ -154,14 +148,15 @@ else:
             df_ingresos_mes = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']
             
             if not df_ingresos_mes.empty:
-                df_mes_ing = df_ingresos_mes.groupby(['Mes', 'Categoria'])['Monto'].sum().reset_index()
+                # CORRECCIÓN: Agrupamos y coloreamos por 'Subcategoria' en lugar de 'Categoria'
+                df_mes_ing = df_ingresos_mes.groupby(['Mes', 'Subcategoria'])['Monto'].sum().reset_index()
                 fig_bar_ing = px.bar(
-                    df_mes_ing, x="Mes", y="Monto", color="Categoria",
+                    df_mes_ing, x="Mes", y="Monto", color="Subcategoria",
                     barmode="stack", text_auto='.2f',
                     color_discrete_sequence=px.colors.qualitative.Pastel
                 )
                 fig_bar_ing.update_traces(hovertemplate="<b>Monto:</b> S/. %{y:,.2f}<extra></extra>")
-                fig_bar_ing.update_layout(xaxis_title="Mes", yaxis_title="Monto (S/.)", legend_title="Fuentes de Ingreso")
+                fig_bar_ing.update_layout(xaxis_title="Mes", yaxis_title="Monto (S/.)", legend_title="Tipos de Ingreso")
                 st.plotly_chart(fig_bar_ing, use_container_width=True)
             else:
                 st.info("No hay ingresos registrados.")
@@ -187,7 +182,6 @@ else:
 
     with tab_inversiones:
         st.subheader("🚀 Análisis Detallado de Capital Invertido")
-        # Para que los gráficos de inversión respeten los filtros de Mes y Subcategoría elegidos en la barra lateral
         df_inv = df_filtrado[df_filtrado['Tipo'] == 'Inversión']
         
         if df_inv.empty:
