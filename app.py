@@ -6,11 +6,10 @@ import plotly.express as px
 # ==========================================
 # 🔒 CONFIGURACIÓN SEGURA DE CREDENCIALES
 # ==========================================
-# Streamlit jala estos datos de manera oculta desde su panel de control
 NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
 DATABASE_ID = st.secrets["DATABASE_ID"]
 
-# Inicializar el cliente de Notion
+# Inicializar el cliente oficial de Notion
 notion = Client(auth=NOTION_TOKEN)
 
 st.set_page_config(page_title="Dashboard de Gastos Financieros", layout="wide")
@@ -20,10 +19,10 @@ st.markdown("Visualización en tiempo real de la data registrada desde el iPhone
 # ==========================================
 # 🔄 EXTRACCIÓN Y LIMPIEZA DE DATA
 # ==========================================
-@st.cache_data(ttl=60) # Sincroniza la data y la refresca cada 60 segundos
+@st.cache_data(ttl=60) # Refresca la data cada 60 segundos si se recarga la página
 def cargar_datos_notion():
     try:
-        # Consultar todas las filas de la base de datos
+        # LLAMADA CORREGIDA: Sintaxis oficial estándar para consultar bases de datos
         response = notion.databases.query(database_id=DATABASE_ID)
         results = response.get("results", [])
         
@@ -31,24 +30,29 @@ def cargar_datos_notion():
         for row in results:
             props = row.get("properties", {})
             
-            # Extraer los campos validando que existan y contengan data
-            monto = props.get("Monto", {}).get("number", 0) or 0
+            # Extraer Monto (Number)
+            monto = props.get("Monto", {}).get("number", 0)
+            monto = float(monto) if monto is not None else 0.0
             
-            # Texto / Descripción (Rich Text)
+            # Extraer Descripción / Texto (Rich Text)
             desc_list = props.get("Descripción", {}).get("rich_text", [])
             descripcion = desc_list[0].get("text", {}).get("content", "Sin descripción") if desc_list else "Sin descripción"
             
-            # Fecha (Date)
-            fecha = props.get("Fecha", {}).get("date", {}).get("start", None) if props.get("Fecha", {}).get("date") else None
+            # Extraer Fecha (Date)
+            fecha_data = props.get("Fecha", {}).get("date", {})
+            fecha = fecha_data.get("start", None) if fecha_data else None
             
-            # Categoría (Select)
-            categoria = props.get("Categoría", {}).get("select", {}).get("name", "Sin Categoría") if props.get("Categoría", {}).get("select") else "Sin Categoría"
+            # Extraer Categoría (Select)
+            categoria_data = props.get("Categoría", {}).get("select", {})
+            categoria = categoria_data.get("name", "Sin Categoría") if categoria_data else "Sin Categoría"
             
-            # Subcategoría (Select)
-            subcategoria = props.get("Subcategoria", {}).get("select", {}).get("name", "Sin Subcategoría") if props.get("Subcategoria", {}).get("select") else "Sin Subcategoría"
+            # Extraer Subcategoría (Select)
+            subcat_data = props.get("Subcategoria", {}).get("select", {})
+            subcategoria = subcat_data.get("name", "Sin Subcategoría") if subcat_data else "Sin Subcategoría"
             
-            # Tarjeta / Medio de Pago (Select)
-            tarjeta = props.get("Tarjeta", {}).get("select", {}).get("name", "No especificado") if props.get("Tarjeta", {}).get("select") else "No especificado"
+            # Extraer Tarjeta / Medio de Pago (Select)
+            tarjeta_data = props.get("Tarjeta", {}).get("select", {})
+            tarjeta = tarjeta_data.get("name", "No especificado") if tarjeta_data else "No especificado"
             
             datos.append({
                 "Fecha": fecha,
@@ -56,7 +60,7 @@ def cargar_datos_notion():
                 "Categoría": categoria,
                 "Subcategoría": subcategoria,
                 "Tarjeta": tarjeta,
-                "Monto": float(monto)
+                "Monto": monto
             })
             
         df = pd.DataFrame(datos)
@@ -69,14 +73,14 @@ def cargar_datos_notion():
         st.error(f"Error al conectar con la API de Notion: {e}")
         return pd.DataFrame()
 
-# Cargar el DataFrame
+# Cargar el DataFrame procesado
 df_gastos = cargar_datos_notion()
 
 # ==========================================
 # 📈 RENDERIZADO DEL DASHBOARD
 # ==========================================
 if df_gastos.empty:
-    st.warning("No se encontraron registros en tu tabla de Gastos Financieros o las credenciales son incorrectas.")
+    st.warning("No se encontraron registros. Verifica que tu base de datos en Notion tenga filas con información y que las columnas se llamen exactamente: Monto, Descripción, Fecha, Categoría, Subcategoria y Tarjeta.")
 else:
     # 1. Indicadores clave (Métricas)
     total_gastado = df_gastos["Monto"].sum()
@@ -120,5 +124,6 @@ else:
     # 4. Tabla de últimos movimientos
     st.subheader("📋 Últimos movimientos registrados")
     df_mostrar = df_gastos.copy()
-    df_mostrar['Fecha'] = df_mostrar['Fecha'].dt.strftime('%Y-%m-%d')
+    # Evitar problemas si hay fechas nulas antes de formatear
+    df_mostrar['Fecha'] = df_mostrar['Fecha'].dt.strftime('%Y-%m-%d').fillna("Sin Fecha")
     st.dataframe(df_mostrar, use_container_width=True)
