@@ -69,34 +69,51 @@ def cargar_datos():
 df_raw = cargar_datos()
 
 # ==========================================
-# 📋 FILTROS (SIDEBAR)
+# 📋 FILTROS INTELIGENTES (SIDEBAR LIMPIO)
 # ==========================================
 st.sidebar.header("🎯 Filtros de Visualización")
+st.sidebar.caption("💡 Si dejas un filtro vacío, se mostrarán TODOS los datos por defecto.")
 
 if not df_raw.empty:
+    # 1. Filtro de Mes
     meses_disp = df_raw['Mes'].unique()[::-1]
-    mes_sel = st.sidebar.multiselect("Seleccionar Mes (MM/YYYY)", meses_disp, default=meses_disp[:2] if len(meses_disp) > 1 else meses_disp)
+    mes_sel = st.sidebar.multiselect("Filtrar por Mes (MM/YYYY)", meses_disp, default=[])
     
+    # 2. Filtro de Tipo
     tipos_disp = df_raw['Tipo'].unique()
-    tipo_sel = st.sidebar.multiselect("Tipo de Movimiento", tipos_disp, default=tipos_disp)
+    tipo_sel = st.sidebar.multiselect("Filtrar por Tipo de Movimiento", tipos_disp, default=[])
 
-    df_filtrado = df_raw[df_raw['Mes'].isin(mes_sel) & df_raw['Tipo'].isin(tipo_sel)]
+    # 3. Filtro de Categoría
+    cat_disp = sorted(df_raw['Categoria'].unique())
+    cat_sel = st.sidebar.multiselect("Filtrar por Categoría", cat_disp, default=[])
+
+    # 4. Filtro de Subcategoría (Nuevo)
+    subcat_disp = sorted(df_raw['Subcategoria'].unique())
+    subcat_sel = st.sidebar.multiselect("Filtrar por Subcategoría", subcat_disp, default=[])
+
+    # --- LÓGICA: Si está vacío, equivale a seleccionar todos ---
+    df_filtrado = df_raw.copy()
     
-    cat_disp = sorted(df_filtrado['Categoria'].unique())
-    cat_sel = st.sidebar.multiselect("Categoría", cat_disp, default=cat_disp)
-    
-    df_filtrado = df_filtrado[df_filtrado['Categoria'].isin(cat_sel)]
+    if mes_sel:
+        df_filtrado = df_filtrado[df_filtrado['Mes'].isin(mes_sel)]
+    if tipo_sel:
+        df_filtrado = df_filtrado[df_filtrado['Tipo'].isin(tipo_sel)]
+    if cat_sel:
+        df_filtrado = df_filtrado[df_filtrado['Categoria'].isin(cat_sel)]
+    if subcat_sel:
+        df_filtrado = df_filtrado[df_filtrado['Subcategoria'].isin(subcat_sel)]
 else:
     df_filtrado = pd.DataFrame()
 
 # ==========================================
 # 📊 LÓGICA DE CÁLCULO
 # ==========================================
-st.title("🏦 Dashboard de Finanzas Personales")
+st.title("🏦 Finanzas Personales")
 
 if df_raw.empty:
     st.error("No se pudo cargar la información. Revisa la conexión con Notion.")
 else:
+    # Cálculos dinámicos basados en la pizarra filtrada
     ingresos = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']['Monto'].sum()
     gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']['Monto'].sum()
     inversiones = df_filtrado[df_filtrado['Tipo'] == 'Inversión']['Monto'].sum()
@@ -126,7 +143,6 @@ else:
                     barmode="stack", text_auto='.2f',
                     color_discrete_sequence=px.colors.qualitative.Safe
                 )
-                # Limpieza del hover: Solo muestra el monto con formato legible
                 fig_bar_sal.update_traces(hovertemplate="<b>Monto:</b> S/. %{y:,.2f}<extra></extra>")
                 fig_bar_sal.update_layout(xaxis_title="Mes", yaxis_title="Monto (S/.)", legend_title="Categorías")
                 st.plotly_chart(fig_bar_sal, use_container_width=True)
@@ -139,7 +155,6 @@ else:
             
             if not df_ingresos_mes.empty:
                 df_mes_ing = df_ingresos_mes.groupby(['Mes', 'Categoria'])['Monto'].sum().reset_index()
-                # Clonamos exactamente el mismo modelo visual que el de gastos
                 fig_bar_ing = px.bar(
                     df_mes_ing, x="Mes", y="Monto", color="Categoria",
                     barmode="stack", text_auto='.2f',
@@ -172,13 +187,12 @@ else:
 
     with tab_inversiones:
         st.subheader("🚀 Análisis Detallado de Capital Invertido")
-        # Filtramos la data cruda únicamente para Tipo == Inversión
-        df_inv = df_raw[df_raw['Tipo'] == 'Inversión']
+        # Para que los gráficos de inversión respeten los filtros de Mes y Subcategoría elegidos en la barra lateral
+        df_inv = df_filtrado[df_filtrado['Tipo'] == 'Inversión']
         
         if df_inv.empty:
-            st.info("No hay registros marcados como 'Inversión' en tu Notion.")
+            st.info("No hay registros de 'Inversión' que coincidan con los filtros actuales.")
         else:
-            # Creamos la etiqueta unificada de tus activos específicos (ej: Emprendimiento iPhone, Acciones, etc.)
             df_inv['Activo_Especifico'] = df_inv.apply(
                 lambda r: f"{r['Categoria']} {r['Subcategoria']}" if "Emprendimiento" in r['Categoria'] else r['Subcategoria'], 
                 axis=1
@@ -199,7 +213,6 @@ else:
             
             with col_inv_tipo:
                 st.markdown("#### 📅 Composición de Inversiones por Mes")
-                # NUEVO ENFOQUE: Reemplazamos la tarta por el mismo modelo de barra apilada mensual solicitada
                 df_mes_inv = df_inv.groupby(['Mes', 'Activo_Especifico'])['Monto'].sum().reset_index()
                 fig_bar_inv_comp = px.bar(
                     df_mes_inv, x="Mes", y="Monto", color="Activo_Especifico",
