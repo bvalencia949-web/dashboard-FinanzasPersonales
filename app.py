@@ -19,47 +19,52 @@ st.markdown("Visualización en tiempo real de la data registrada desde el iPhone
 # ==========================================
 # 🔄 EXTRACCIÓN Y LIMPIEZA DE DATA
 # ==========================================
-@st.cache_data(ttl=60) # Refresca la data cada 60 segundos si se recarga la página
+@st.cache_data(ttl=10) # Cache corta para forzar la actualización inmediata
 def cargar_datos_notion():
     try:
-        # LLAMADA CORREGIDA: Sintaxis oficial estándar para consultar bases de datos
-        response = notion.databases.query(database_id=DATABASE_ID)
+        # Forzamos la consulta utilizando el cliente de la base de datos de manera directa
+        response = notion.databases.query(**{"database_id": DATABASE_ID})
         results = response.get("results", [])
         
         datos = []
         for row in results:
             props = row.get("properties", {})
             
-            # Extraer Monto (Number)
+            # 1. Monto (Number)
             monto = props.get("Monto", {}).get("number", 0)
             monto = float(monto) if monto is not None else 0.0
             
-            # Extraer Descripción / Texto (Rich Text)
-            desc_list = props.get("Descripción", {}).get("rich_text", [])
+            # 2. Descripcion (Rich Text) - Ajustado sin tilde
+            desc_list = props.get("Descripcion", {}).get("rich_text", [])
             descripcion = desc_list[0].get("text", {}).get("content", "Sin descripción") if desc_list else "Sin descripción"
             
-            # Extraer Fecha (Date)
+            # 3. Fecha (Date)
             fecha_data = props.get("Fecha", {}).get("date", {})
             fecha = fecha_data.get("start", None) if fecha_data else None
             
-            # Extraer Categoría (Select)
-            categoria_data = props.get("Categoría", {}).get("select", {})
+            # 4. Categoria (Select) - Ajustado sin tilde
+            categoria_data = props.get("Categoria", {}).get("select", {})
             categoria = categoria_data.get("name", "Sin Categoría") if categoria_data else "Sin Categoría"
             
-            # Extraer Subcategoría (Select)
+            # 5. Subcategoria (Select)
             subcat_data = props.get("Subcategoria", {}).get("select", {})
             subcategoria = subcat_data.get("name", "Sin Subcategoría") if subcat_data else "Sin Subcategoría"
             
-            # Extraer Tarjeta / Medio de Pago (Select)
+            # 6. Tarjeta (Select)
             tarjeta_data = props.get("Tarjeta", {}).get("select", {})
             tarjeta = tarjeta_data.get("name", "No especificado") if tarjeta_data else "No especificado"
             
+            # 7. Tipo (Select) - Columna adicional que mencionaste
+            tipo_data = props.get("Tipo", {}).get("select", {})
+            tipo = tipo_data.get("name", "No especificado") if tipo_data else "No especificado"
+            
             datos.append({
                 "Fecha": fecha,
-                "Descripción": descripcion,
-                "Categoría": categoria,
-                "Subcategoría": subcategoria,
+                "Descripcion": descripcion,
+                "Categoria": categoria,
+                "Subcategoria": subcategoria,
                 "Tarjeta": tarjeta,
+                "Tipo": tipo,
                 "Monto": monto
             })
             
@@ -80,7 +85,7 @@ df_gastos = cargar_datos_notion()
 # 📈 RENDERIZADO DEL DASHBOARD
 # ==========================================
 if df_gastos.empty:
-    st.warning("No se encontraron registros. Verifica que tu base de datos en Notion tenga filas con información y que las columnas se llamen exactamente: Monto, Descripción, Fecha, Categoría, Subcategoria y Tarjeta.")
+    st.warning("No se encontraron registros. Verifica que tus credenciales en 'Advanced settings' de Streamlit sean correctas.")
 else:
     # 1. Indicadores clave (Métricas)
     total_gastado = df_gastos["Monto"].sum()
@@ -97,8 +102,8 @@ else:
     
     with col_graf1:
         st.subheader("Gastos por Macro-Categoría")
-        df_cat = df_gastos.groupby("Categoría")["Monto"].sum().reset_index()
-        fig_pie = px.pie(df_cat, values="Monto", names="Categoría", 
+        df_cat = df_gastos.groupby("Categoria")["Monto"].sum().reset_index()
+        fig_pie = px.pie(df_cat, values="Monto", names="Categoria", 
                          hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
         st.plotly_chart(fig_pie, use_container_width=True)
         
@@ -114,8 +119,8 @@ else:
     
     # 3. Vista de Subcategorías detallada
     st.subheader("🔍 Desglose profundo por Subcategoría")
-    df_sub = df_gastos.groupby(["Categoría", "Subcategoría"])["Monto"].sum().reset_index()
-    fig_sun = px.sunburst(df_sub, path=["Categoría", "Subcategoría"], values="Monto",
+    df_sub = df_gastos.groupby(["Categoria", "Subcategoria"])["Monto"].sum().reset_index()
+    fig_sun = px.sunburst(df_sub, path=["Categoria", "Subcategoria"], values="Monto",
                           color="Monto", color_continuous_scale="RdBu_r")
     st.plotly_chart(fig_sun, use_container_width=True)
 
@@ -124,6 +129,5 @@ else:
     # 4. Tabla de últimos movimientos
     st.subheader("📋 Últimos movimientos registrados")
     df_mostrar = df_gastos.copy()
-    # Evitar problemas si hay fechas nulas antes de formatear
     df_mostrar['Fecha'] = df_mostrar['Fecha'].dt.strftime('%Y-%m-%d').fillna("Sin Fecha")
     st.dataframe(df_mostrar, use_container_width=True)
