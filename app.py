@@ -71,20 +71,20 @@ df_raw = cargar_datos()
 # ==========================================
 # 📋 FILTROS INTELIGENTES (SIDEBAR LIMPIO)
 # ==========================================
-st.sidebar.header("🎯 Filtros de Visualización")
+st.sidebar.header("🎯 Filtros")
 
 if not df_raw.empty:
     meses_disp = df_raw['Mes'].unique()[::-1]
-    mes_sel = st.sidebar.multiselect("Filtrar por Mes", meses_disp, default=[])
+    mes_sel = st.sidebar.multiselect("Mes", meses_disp, default=[])
     
     tipos_disp = df_raw['Tipo'].unique()
-    tipo_sel = st.sidebar.multiselect("Filtrar por Tipo de Movimiento", tipos_disp, default=[])
+    tipo_sel = st.sidebar.multiselect("Tipo de Movimiento", tipos_disp, default=[])
 
     cat_disp = sorted(df_raw['Categoria'].unique())
-    cat_sel = st.sidebar.multiselect("Filtrar por Categoría", cat_disp, default=[])
+    cat_sel = st.sidebar.multiselect("Categoría", cat_disp, default=[])
 
     subcat_disp = sorted(df_raw['Subcategoria'].unique())
-    subcat_sel = st.sidebar.multiselect("Filtrar por Subcategoría", subcat_disp, default=[])
+    subcat_sel = st.sidebar.multiselect("Subcategoría", subcat_disp, default=[])
 
     df_filtrado = df_raw.copy()
     
@@ -102,7 +102,7 @@ else:
 # ==========================================
 # 📊 LÓGICA DE CÁLCULO
 # ==========================================
-st.title("🏦 Dashboard de Finanzas Personales")
+st.title("🏦 Finanzas Personales")
 
 if df_raw.empty:
     st.error("No se pudo cargar la información. Revisa la conexión con Notion.")
@@ -113,7 +113,7 @@ else:
     saldo_neto = ingresos - gastos - inversiones
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("💰 Saldo Neto (Filtrado)", f"S/. {saldo_neto:,.2f}")
+    m1.metric("💰 Saldo Neto", f"S/. {saldo_neto:,.2f}")
     m2.metric("📈 Ingresos", f"S/. {ingresos:,.2f}")
     m3.metric("📉 Gastos total", f"S/. {gastos:,.2f}")
     m4.metric("🧱 Inversiones", f"S/. {inversiones:,.2f}")
@@ -126,7 +126,7 @@ else:
         col_salidas, col_entradas = st.columns(2)
         
         with col_salidas:
-            st.subheader("📅 Composición de Gastos por Mes")
+            st.subheader("Gastos por Mes")
             df_solo_gastos_mes = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
             
             if not df_solo_gastos_mes.empty:
@@ -143,7 +143,7 @@ else:
                 st.info("No hay gastos registrados en este periodo.")
             
         with col_entradas:
-            st.subheader("📅 Composición de Ingresos por Mes")
+            st.subheader("Ingresos por Mes")
             df_ingresos_mes = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']
             
             if not df_ingresos_mes.empty:
@@ -160,7 +160,7 @@ else:
                 st.info("No hay ingresos registrados.")
 
         st.markdown("---")
-        st.subheader("🔍 Desglose Dinámico de Gastos (Haz clic para expandir Subcategorías)")
+        st.subheader("🔍 Desglose de Gastos")
         df_solo_gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
         
         if not df_solo_gastos.empty:
@@ -199,14 +199,14 @@ else:
                 df_inv_month = df_inv.groupby(['Mes'])['Monto'].sum().reset_index()
                 fig_inv_cron = px.bar(
                     df_inv_month, x='Mes', y='Monto', text_auto='.2f',
-                    title="Monto Total Inyectado por Mes", color_discrete_sequence=['#2b5c8f']
+                    title="Monto Total", color_discrete_sequence=['#2b5c8f']
                 )
                 fig_inv_cron.update_traces(hovertemplate="<b>Total Invertido:</b> S/. %{y:,.2f}<extra></extra>")
                 fig_inv_cron.update_layout(xaxis_title="Mes", yaxis_title="Total Invertido (S/.)")
                 st.plotly_chart(fig_inv_cron, use_container_width=True)
             
             with col_inv_tipo:
-                st.markdown("#### 📅 Composición de Inversiones por Mes")
+                st.markdown("#### 📅 Inversiones por Mes")
                 df_mes_inv = df_inv.groupby(['Mes', 'Activo_Especifico'])['Monto'].sum().reset_index()
                 fig_bar_inv_comp = px.bar(
                     df_mes_inv, x="Mes", y="Monto", color="Activo_Especifico",
@@ -218,6 +218,6 @@ else:
                 st.plotly_chart(fig_bar_inv_comp, use_container_width=True)
 
             st.markdown("---")
-            st.markdown("##### 📋 Historial Consolidado de Inversiones")
+            st.markdown("##### 📋 Historial de Inversiones")
             st.dataframe(df_inv[['Fecha_Raw', 'Categoria', 'Subcategoria', 'Activo_Especifico', 'Monto', 'Descripcion']].rename(columns={'Fecha_Raw': 'Fecha'}), 
                          use_container_width=True, hide_index=True)
