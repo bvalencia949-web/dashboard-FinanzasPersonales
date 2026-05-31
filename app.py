@@ -9,20 +9,15 @@ import requests
 NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
 DATABASE_ID = st.secrets["DATABASE_ID"]
 
-st.set_page_config(
-    page_title="Gestión Financiera Pro", 
-    page_icon="🏦",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Gestión Financiera Pro", layout="wide")
 
-# Inyección de estilos CSS avanzados para un Look & Feel Premium
+# Inyección de estilos CSS avanzados para mantener el look and feel profesional
 st.markdown("""
     <style>
-    /* Estilización general del fondo y contenedores */
+    /* Estilización general de la página y contenedores */
     .block-container { padding-top: 2rem; padding-bottom: 2rem; }
     
-    /* Tarjetas para Métricas */
+    /* Tarjetas modernas para las Métricas */
     div[data-testid="stMetric"] {
         background-color: var(--background-secondary-color);
         padding: 20px 24px;
@@ -35,11 +30,11 @@ st.markdown("""
         transform: translateY(-2px);
     }
     div[data-testid="stMetricValue"] { 
-        font-size: 32px !important; 
+        font-size: 28px !important; 
         font-weight: 700 !important;
     }
     
-    /* Líneas divisorias estéticas */
+    /* Líneas divisorias estéticas con degradado sutil */
     hr {
         margin: 2rem 0;
         border: 0;
@@ -54,11 +49,11 @@ st.markdown("""
         padding: 12px 20px !important;
     }
     
-    /* Ajustes de títulos de gráficos */
-    .graph-title {
-        font-size: 18px;
+    /* Ajustes para títulos de secciones */
+    .section-title {
+        font-size: 1.25rem;
         font-weight: 600;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
         color: var(--text-color);
     }
     </style>
@@ -116,26 +111,24 @@ def cargar_datos():
 df_raw = cargar_datos()
 
 # ==========================================
-# 📋 FILTROS INTELIGENTES (SIDEBAR LIMPIO Y MODERNO)
+# 📋 FILTROS INTELIGENTES (SIDEBAR LIMPIO)
 # ==========================================
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/781/781831.png", width=60) # Icono sutil de finanzas
-    st.title("Panel de Control")
-    st.markdown("Filtra la información del ecosistema financiero.")
+    st.header("🎯 Filtros")
     st.markdown("---")
-    
+
     if not df_raw.empty:
         meses_disp = df_raw['Mes'].unique()[::-1]
-        mes_sel = st.multiselect("📅 Periodo (Mes)", meses_disp, default=[])
+        mes_sel = st.multiselect("Mes", meses_disp, default=[])
         
         tipos_disp = df_raw['Tipo'].unique()
-        tipo_sel = st.multiselect("🔄 Tipo de Movimiento", tipos_disp, default=[])
+        tipo_sel = st.multiselect("Tipo de Movimiento", tipos_disp, default=[])
 
         cat_disp = sorted(df_raw['Categoria'].unique())
-        cat_sel = st.multiselect("📁 Categoría", cat_disp, default=[])
+        cat_sel = st.multiselect("Categoría", cat_disp, default=[])
 
         subcat_disp = sorted(df_raw['Subcategoria'].unique())
-        subcat_sel = st.multiselect("🏷️ Subcategoría", subcat_disp, default=[])
+        subcat_sel = st.multiselect("Subcategoría", subcat_disp, default=[])
 
         df_filtrado = df_raw.copy()
         
@@ -151,41 +144,33 @@ with st.sidebar:
         df_filtrado = pd.DataFrame()
 
 # ==========================================
-# 📊 LÓGICA DE CÁLCULO Y RENDERIZADO
+# 📊 LÓGICA DE CÁLCULO
 # ==========================================
-# Encabezado Principal Limpio
-st.markdown("# 🏦 Control de Finanzas Personales")
-st.markdown("Dashboard operativo de ingresos, egresos corporativos y balance patrimonial.")
+st.title("🏦 Finanzas Personales")
 
 if df_raw.empty:
-    st.error("⚠️ No se pudo establecer conexión con las bases de datos de Notion. Verifica las credenciales de tus Secrets.")
+    st.error("No se pudo cargar la información. Revisa la conexión con Notion.")
 else:
-    # Cálculos Financieros
     ingresos = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']['Monto'].sum()
     gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']['Monto'].sum()
     inversiones = df_filtrado[df_filtrado['Tipo'] == 'Inversión']['Monto'].sum()
     saldo_neto = ingresos - gastos - inversiones
 
-    # Renderizado estético de métricas clave (KPI Cards)
-    st.markdown("### 📈 Indicadores Financieros")
     m1, m2, m3, m4 = st.columns(4)
-    
-    # Se añade un truco CSS inline para cambiar sutilmente el color de la métrica por su naturaleza
-    m1.metric("💰 Saldo Neto disponible", f"S/. {saldo_neto:,.2f}")
-    m2.metric("📈 Ingresos Totales", f"S/. {ingresos:,.2f}")
-    m3.metric("📉 Gastos Operativos", f"S/. {gastos:,.2f}")
-    m4.metric("🧱 Capital Invertido", f"S/. {inversiones:,.2f}")
+    m1.metric("💰 Saldo Neto", f"S/. {saldo_neto:,.2f}")
+    m2.metric("📈 Ingresos", f"S/. {ingresos:,.2f}")
+    m3.metric("📉 Gastos total", f"S/. {gastos:,.2f}")
+    m4.metric("🧱 Inversiones", f"S/. {inversiones:,.2f}")
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # Tabs de navegación limpios
-    tab_general, tab_inversiones = st.tabs(["📊 Análisis Operativo General", "🚀 Portafolio de Inversiones"])
+    tab_general, tab_inversiones = st.tabs(["📊 Análisis Operativo", "🚀 Rendimiento Inversiones"])
 
     with tab_general:
         col_salidas, col_entradas = st.columns(2)
         
         with col_salidas:
-            st.markdown('<p class="graph-title">📉 Distribución de Gastos Mensuales</p>', unsafe_allow_html=True)
+            st.markdown('<p class="section-title">Gastos por Mes</p>', unsafe_allow_html=True)
             df_solo_gastos_mes = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
             
             if not df_solo_gastos_mes.empty:
@@ -199,10 +184,10 @@ else:
                 fig_bar_sal.update_layout(xaxis_title="Mes", yaxis_title="Monto (S/.)", legend_title="Categorías", margin=dict(t=10, b=10))
                 st.plotly_chart(fig_bar_sal, use_container_width=True)
             else:
-                st.info("No se registran egresos en el rango de fechas seleccionado.")
+                st.info("No hay gastos registrados en este periodo.")
             
         with col_entradas:
-            st.markdown('<p class="graph-title">📈 Flujo de Ingresos por Subcategoría</p>', unsafe_allow_html=True)
+            st.markdown('<p class="section-title">Ingresos por Mes</p>', unsafe_allow_html=True)
             df_ingresos_mes = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']
             
             if not df_ingresos_mes.empty:
@@ -216,10 +201,10 @@ else:
                 fig_bar_ing.update_layout(xaxis_title="Mes", yaxis_title="Monto (S/.)", legend_title="Tipos de Ingreso", margin=dict(t=10, b=10))
                 st.plotly_chart(fig_bar_ing, use_container_width=True)
             else:
-                st.info("No se registran ingresos en el rango de fechas seleccionado.")
+                st.info("No hay ingresos registrados.")
 
         st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown('<p class="graph-title">🔍 Desglose Estructurado de Gastos (Treemap)</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-title">🔍 Desglose de Gastos</p>', unsafe_allow_html=True)
         df_solo_gastos = df_filtrado[df_filtrado['Tipo'] == 'Gasto']
         
         if not df_solo_gastos.empty:
@@ -238,14 +223,14 @@ else:
             fig_drill.update_layout(margin=dict(t=10, b=10, l=10, r=10))
             st.plotly_chart(fig_drill, use_container_width=True)
         else:
-            st.info("No hay registros clasificados como 'Gasto' para generar el mapa de proporciones.")
+            st.info("No hay registros clasificados como 'Gasto' para mostrar el desglose.")
 
     with tab_inversiones:
-        st.markdown('<p class="graph-title">🚀 Análisis Detallado de Capital Invertido</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-title">🚀 Análisis Detallado de Capital Invertido</p>', unsafe_allow_html=True)
         df_inv = df_filtrado[df_filtrado['Tipo'] == 'Inversión']
         
         if df_inv.empty:
-            st.info("No se encontraron activos o movimientos de inversión vinculados al filtro.")
+            st.info("No hay registros de 'Inversión' que coincidan con los filtros actuales.")
         else:
             df_inv['Activo_Especifico'] = df_inv.apply(
                 lambda r: f"{r['Categoria']} {r['Subcategoria']}" if "Emprendimiento" in r['Categoria'] else r['Subcategoria'], 
@@ -255,7 +240,7 @@ else:
             col_inv_mes, col_inv_tipo = st.columns(2)
             
             with col_inv_mes:
-                st.markdown("##### 📅 Ritmo de Inversión Mensual")
+                st.markdown("#### 📅 Ritmo de Inversión Mensual")
                 df_inv_month = df_inv.groupby(['Mes'])['Monto'].sum().reset_index()
                 fig_inv_cron = px.bar(
                     df_inv_month, x='Mes', y='Monto', text_auto='.2f',
@@ -266,7 +251,7 @@ else:
                 st.plotly_chart(fig_inv_cron, use_container_width=True)
             
             with col_inv_tipo:
-                st.markdown("##### 📅 Inversiones por Mes")
+                st.markdown("#### 📅 Inversiones por Mes")
                 df_mes_inv = df_inv.groupby(['Mes', 'Activo_Especifico'])['Monto'].sum().reset_index()
                 fig_bar_inv_comp = px.bar(
                     df_mes_inv, x="Mes", y="Monto", color="Activo_Especifico",
@@ -279,8 +264,6 @@ else:
 
             st.markdown("<hr>", unsafe_allow_html=True)
             st.markdown("##### 📋 Historial de Inversiones")
-            
-            # Formateo visual estético a la tabla nativa de Streamlit
             st.dataframe(
                 df_inv[['Fecha_Raw', 'Categoria', 'Subcategoria', 'Activo_Especifico', 'Monto', 'Descripcion']].rename(columns={'Fecha_Raw': 'Fecha'}), 
                 use_container_width=True, 
